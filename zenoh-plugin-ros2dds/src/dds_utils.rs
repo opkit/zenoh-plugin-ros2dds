@@ -282,6 +282,16 @@ where
 {
     unsafe {
         let t = create_topic(dp, &topic_name, &type_name, type_info, keyless);
+        // [DIAG] probe handles before dds_create_reader
+        let mut ih: dds_instance_handle_t = 0;
+        let dp_valid = dds_get_instance_handle(dp, &mut ih) == 0;
+        let t_valid = if t > 0 { dds_get_instance_handle(t, &mut ih) == 0 } else { false };
+        if !dp_valid || !t_valid {
+            tracing::error!(
+                "[DIAG] pre-check: dp={} (valid={}), topic_handle={} (valid={}), topic='{}', type='{}', keyless={}",
+                dp, dp_valid, t, t_valid, topic_name, type_name, keyless
+            );
+        }
         match read_period {
             None => {
                 // Use a Listener to route data as soon as it arrives
@@ -304,6 +314,11 @@ where
                     }
                     Ok(reader)
                 } else {
+                    // [DIAG] dds_create_reader failed
+                    tracing::error!(
+                        "[DIAG] dds_create_reader FAILED: retcode={}, dp={} (valid={}), topic_handle={} (valid={}), topic='{}', type='{}', keyless={}, qos={:?}",
+                        reader, dp, dp_valid, t, t_valid, topic_name, type_name, keyless, qos
+                    );
                     Err(format!(
                         "Error creating DDS Reader: {}",
                         CStr::from_ptr(dds_strretcode(-reader))
@@ -320,6 +335,13 @@ where
                 });
                 let qos_native = qos.to_qos_native();
                 let reader = dds_create_reader(dp, t, qos_native, std::ptr::null());
+                // [DIAG] periodic reader path
+                if reader < 0 {
+                    tracing::error!(
+                        "[DIAG] dds_create_reader(periodic) FAILED: retcode={}, dp={} (valid={}), topic_handle={} (valid={}), topic='{}', type='{}', keyless={}",
+                        reader, dp, dp_valid, t, t_valid, topic_name, type_name, keyless
+                    );
+                }
                 task::spawn(async move {
                     // loop while reader's instance handle remain the same
                     // (if reader was deleted, its dds_entity_t value might have been

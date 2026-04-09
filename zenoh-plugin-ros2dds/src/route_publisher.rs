@@ -236,7 +236,12 @@ impl RoutePublisher {
                 let publisher = publisher.clone();
 
                 move |status| {
-                    tracing::debug!("{route_id} MatchingStatus changed: {status:?}");
+                    tracing::warn!(
+                        "[DIAG] {route_id} matching={}, current_reader={}, dp={}",
+                        status.matching(),
+                        dds_reader.load(Ordering::Relaxed),
+                        context.participant
+                    );
                     if status.matching() {
                         if let Err(e) = activate_dds_reader(
                             &dds_reader,
