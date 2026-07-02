@@ -309,6 +309,9 @@ where
                 let qos_native = qos.to_qos_native();
                 let reader = dds_create_reader(dp, t, qos_native, sub_listener);
                 Qos::delete_qos_native(qos_native);
+                // The listener callbacks are copied into the reader entity (dds_merge_listener),
+                // so the caller-owned listener struct must be freed here to avoid leaking it.
+                dds_delete_listener(sub_listener);
                 // Delete the topic handle: the reader holds its own reference to the topic
                 // entity, so it stays functional. Without this, each reader creation leaks
                 // one child entity of the participant, and the participant handle's 14-bit
