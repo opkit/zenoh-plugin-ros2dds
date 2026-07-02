@@ -175,6 +175,13 @@ pub fn create_dds_writer(
         let qos_native = qos.to_qos_native();
         let writer: i32 = dds_create_writer(dp, t, qos_native, std::ptr::null_mut());
         Qos::delete_qos_native(qos_native);
+        // Delete the topic handle: the writer holds its own reference to the topic entity,
+        // so it stays functional. Without this, each writer creation leaks one child entity
+        // of the participant, and the participant handle's 14-bit child refcount overflows
+        // after 16383 children (all DDS calls then fail with DDS_RETCODE_BAD_PARAMETER).
+        if t > 0 {
+            dds_delete(t);
+        }
         if writer >= 0 {
             Ok(writer)
         } else {
@@ -302,6 +309,14 @@ where
                 let qos_native = qos.to_qos_native();
                 let reader = dds_create_reader(dp, t, qos_native, sub_listener);
                 Qos::delete_qos_native(qos_native);
+                // Delete the topic handle: the reader holds its own reference to the topic
+                // entity, so it stays functional. Without this, each reader creation leaks
+                // one child entity of the participant, and the participant handle's 14-bit
+                // child refcount overflows after 16383 children (all DDS calls then fail
+                // with DDS_RETCODE_BAD_PARAMETER).
+                if t > 0 {
+                    dds_delete(t);
+                }
                 if reader >= 0 {
                     let res = dds_reader_wait_for_historical_data(reader, qos::DDS_100MS_DURATION);
                     if res < 0 {
@@ -335,6 +350,11 @@ where
                 });
                 let qos_native = qos.to_qos_native();
                 let reader = dds_create_reader(dp, t, qos_native, std::ptr::null());
+                Qos::delete_qos_native(qos_native);
+                // Delete the topic handle (see comment in the listener-based path above)
+                if t > 0 {
+                    dds_delete(t);
+                }
                 // [DIAG] periodic reader path
                 if reader < 0 {
                     tracing::error!(
